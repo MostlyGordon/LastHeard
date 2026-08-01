@@ -1,0 +1,6 @@
+name = "lastheard-api"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+# Local dev:  npx wrangler dev     -> http://localhost:8787
+# Deploy:     npx wrangler deploy

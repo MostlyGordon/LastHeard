@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# build output
+web/dist/
+web/dev-dist/
+
+# wrangler / cloudflare
+worker/.wrangler/
+worker/.dev.vars
+
+# env
+.env
+*.env.local
+web/.env.local
+
+# os / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
