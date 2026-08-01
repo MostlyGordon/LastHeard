@@ -14,6 +14,12 @@ export async function fetchVkLastHeard() {
   return res.json();
 }
 
+export async function fetchPeanutLastHeard() {
+  const res = await fetch(`${BASE}/api/peanut-lastheard`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`peanut-lastheard ${res.status}`);
+  return res.json();
+}
+
 export async function fetchLookup(call) {
   const res = await fetch(`${BASE}/api/lookup?call=${encodeURIComponent(call)}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`lookup ${res.status}`);

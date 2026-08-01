@@ -14,11 +14,13 @@
         <img src="/icon.svg" alt="" width="28" height="28" />
         <h1>LastHeard</h1>
         <span id="status" class="status" title="Poll status">●</span>
+        <button id="about-toggle" class="about-btn" title="About LastHeard" aria-label="About LastHeard">ⓘ</button>
       </div>
       <div class="controls">
         <input id="filter" type="search" placeholder="Filter: area, callsign, repeater, talkgroup, mode, network…" autocomplete="off" />
         <button id="bm-toggle" class="toggle on" title="Toggle Brandmeister DMR live stream">DMR ●</button>
         <button id="vk-toggle" class="toggle on" title="Toggle VK DMR (ipsc3.vkdmr.com) live list">VK ●</button>
+        <button id="peanut-toggle" class="toggle on" title="Toggle Peanut (peanut.pa7lim.nl) YSF/Fusion live list">PNT ●</button>
         <button id="alarm-toggle" class="toggle off" title="Enable alarm sound (click to enable audio)">🔇 Sound off</button>
       </div>
     </header>
@@ -36,6 +38,28 @@
       <div id="list" class="list"></div>
       <p id="empty" class="empty" hidden>No stations heard in the last 10 minutes.</p>
     </main>
+
+    <div id="about-modal" class="modal" hidden>
+      <div class="modal-card">
+        <button class="modal-close" id="about-close" aria-label="Close">✕</button>
+        <h2>LastHeard DV</h2>
+        <p class="about-byline">by Gordon — <strong>VK3TEN</strong></p>
+        <p>
+          A live &ldquo;last heard&rdquo; list for amateur-radio digital voice modes &mdash;
+          D-STAR, Brandmeister &amp; VK DMR, and Peanut (YSF/Fusion).
+        </p>
+        <p>
+          Questions, feedback, or feature requests?
+          <a href="mailto:vk3ten@gmail.com">vk3ten@gmail.com</a>
+          &mdash; please email if you enjoy the app or have ideas.
+        </p>
+        <p class="about-license">
+          Released under the
+          <a href="https://opensource.org/license/mit" target="_blank" rel="noopener">MIT License</a>.
+          Free to use; provided &ldquo;as is&rdquo; without warranty of any kind.
+        </p>
+      </div>
+    </div>
 
     <script type="module" src="/src/main.js"></script>
   </body>

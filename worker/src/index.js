@@ -4,6 +4,7 @@
 
 const SRC_URL = "http://dsm.dstarusers.org/lastheard.php?refresh=1";
 const VK_URL = "https://ipsc3.vkdmr.com/dashboard/radios";
+const PEANUT_URL = "https://peanut.pa7lim.nl/api/lastheard.json";
 const HAMDB_URL = (call) => `http://api.hamdb.org/v1/${call}/json/lastheard`;
 
 const CORS = {
@@ -23,9 +24,11 @@ export default {
 
     if (url.pathname === "/api/lastheard") return handleLastHeard(request, ctx);
     if (url.pathname === "/api/vk-lastheard") return handleVkLastHeard(request, ctx);
+    if (url.pathname === "/api/peanut-lastheard") return handlePeanutLastHeard(request, ctx);
     if (url.pathname === "/api/lookup") return handleLookup(request, ctx);
     if (url.pathname === "/api/debug") return handleDebug(request, ctx);
     if (url.pathname === "/api/vk-debug") return handleVkDebug(request, ctx);
+    if (url.pathname === "/api/peanut-debug") return handlePeanutDebug(request, ctx);
     if (url.pathname === "/" || url.pathname === "/health") return json({ ok: true, service: "lastheard-api" });
 
     return json({ error: "not found", path: url.pathname }, 404);
@@ -239,6 +242,59 @@ function parseVkRadios(html) {
 }
 
 // ---------------------------------------------------------------------------
+// /api/peanut-lastheard  (Peanut / peanut.pa7lim.nl scrape)
+// ---------------------------------------------------------------------------
+
+// Peanut (David PA7LIM) is a YSF/Fusion platform that also bridges XLX
+// reflectors. It exposes a clean JSON lastheard list at /api/lastheard.json
+// (no CORS headers, so the browser can't fetch it directly — hence this proxy).
+// Each row is { call, lastseen, options, room }. lastseen is an RFC-2822 string
+// ("Sat, 01 Aug 2026 09:37:53 UTC"); room is the reflector/room, e.g. "YSF-EURO"
+// or "XLX775M". Peanut exposes no names, so they're resolved via HamDB in the PWA.
+
+async function handlePeanutLastHeard(request, ctx) {
+  try {
+    const res = await fetch(PEANUT_URL, {
+      headers: { "User-Agent": "LastHeard-PWA/1.0 (+https://github.com/lastheard)" },
+      cf: { cacheTtl: 20 },
+    });
+    if (!res.ok) return json({ error: `upstream ${res.status}` }, 502);
+    const data = await res.json();
+    const records = parsePeanut(Array.isArray(data) ? data : []);
+    return json(records, 200, { "Cache-Control": "public, max-age=20" });
+  } catch (err) {
+    return json({ error: String(err && err.message || err) }, 502);
+  }
+}
+
+function parsePeanut(rows) {
+  const records = [];
+  for (const r of rows) {
+    const call = (r && r.call || "").toUpperCase().trim();
+    if (!call) continue;
+    const t = new Date(r.lastseen);
+    const time = isNaN(t.getTime()) ? null : t.toISOString();
+    if (!time) continue;
+    const room = (r.room || "").trim();
+    const isXlx = /^XLX/.test(room);
+    // XLX room "XLX775M" -> module letter "M"; YSF rooms have no module.
+    const mod = (room.match(/XLX\d+([A-Z])$/) || [])[1] || "";
+    records.push({
+      callsign: call,
+      name: "", // resolved via HamDB in the PWA (Peanut exposes no names)
+      module: mod,
+      time,
+      system: room, // reflector / room, e.g. "YSF-EURO" or "XLX775M"
+      nodeLabel: "",
+      location: "",
+      mode: isXlx ? "D-STAR" : "YSF",
+      source: "Peanut",
+    });
+  }
+  return records;
+}
+
+// ---------------------------------------------------------------------------
 // /api/lookup?call=CALLSIGN  (HamDB proxy + cache)
 // ---------------------------------------------------------------------------
 
@@ -327,6 +383,21 @@ async function handleVkDebug(request, ctx) {
     if (!res.ok) return json({ error: `upstream ${res.status}` }, 502);
     const html = await res.text();
     const recs = parseVkRadios(html);
+    return json({ count: recs.length, firstRecords: recs.slice(0, 5) });
+  } catch (err) {
+    return json({ error: String(err && err.message || err) }, 502);
+  }
+}
+
+async function handlePeanutDebug(request, ctx) {
+  try {
+    const res = await fetch(PEANUT_URL, {
+      headers: { "User-Agent": "LastHeard-PWA/1.0" },
+      cf: { cacheTtl: 20 },
+    });
+    if (!res.ok) return json({ error: `upstream ${res.status}` }, 502);
+    const data = await res.json();
+    const recs = parsePeanut(Array.isArray(data) ? data : []);
     return json({ count: recs.length, firstRecords: recs.slice(0, 5) });
   } catch (err) {
     return json({ error: String(err && err.message || err) }, 502);

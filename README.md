@@ -1,8 +1,9 @@
 # LastHeard
 
 A Progressive Web App that shows a live **"last heard"** list of stations heard on
-amateur-radio digital voice modes — **D-STAR**, **DMR (Brandmeister)**, and **VK DMR**
-(ipsc3.vkdmr.com). Installable on PC, tablet, and phone; works offline-first as a PWA.
+amateur-radio digital voice modes — **D-STAR**, **DMR (Brandmeister)**, **VK DMR**
+(ipsc3.vkdmr.com), and **Peanut** (peanut.pa7lim.nl YSF/Fusion). Installable on PC,
+tablet, and phone; works offline-first as a PWA.
 
 ## Features
 
@@ -14,17 +15,22 @@ amateur-radio digital voice modes — **D-STAR**, **DMR (Brandmeister)**, and **
   [ipsc3.vkdmr.com](https://ipsc3.vkdmr.com/dashboard), polled every 30s via the
   Cloudflare Worker. Real transmission timestamps are recovered from the page's
   Next.js flight payload so alarm/sticky timing is correct.
+- **Peanut** (David PA7LIM's YSF/Fusion platform, which also bridges XLX reflectors)
+  polled from [peanut.pa7lim.nl](https://peanut.pa7lim.nl/) every 30s via the Worker.
+  Rooms are tagged `YSF` or `D-STAR` (XLX rooms carry the module letter).
 - Each station shows **callsign, name, digital mode, network, and repeater/reflector/talk group**.
 - **Sticky for 10 minutes** — a station stays on screen for 10 min after its last
   transmission, even if it drops out of the feed. A new transmission resets the window.
 - **Area/source filter** — a search box that matches location, callsign,
-  repeater/reflector, talk group, mode, or network (e.g. `VK`, `Brandmeister`, `DMR`).
+  repeater/reflector, talk group, mode, or network (e.g. `VK`, `Brandmeister`, `DMR`, `Peanut`, `YSF`).
 - **On-air alarms** — keep a watchlist of callsigns (per-row ★/☆ toggle or the alarm
   panel); when one comes on air on any network the app beeps (Web Audio) and
   flashes (row highlight + title flash). Sound is gated behind a "Sound" click to
   satisfy browser autoplay policies. System notifications are used when permission is granted.
-- Names resolved via the free [HamDB](https://hamdb.org/api) API for D-STAR (cached
-  locally); Brandmeister and VK DMR names come straight from their feeds.
+- Names resolved via the free [HamDB](https://hamdb.org/api) API for D-STAR and
+  Peanut (cached locally); Brandmeister and VK DMR names come straight from their feeds.
+- **About popup** — the ⓘ in the header shows app info and a contact address
+  for feedback/feature requests.
 - Responsive: table on wide screens, stacked cards on phones; dark/light themes.
 
 ## Architecture
@@ -32,16 +38,17 @@ amateur-radio digital voice modes — **D-STAR**, **DMR (Brandmeister)**, and **
 ```
 [ dsm.dstarusers.org  ] --fetch+parse--> [ Cloudflare Worker ] --JSON--> [ Vite PWA ]
 [ ipsc3.vkdmr.com     ] --fetch+parse---/        (CORS)                  (poll, render, alarm)
+[ peanut.pa7lim.nl    ] --fetch+JSON---/
 [ api.hamdb.org       ] --proxy+cache--/
 [ api.brandmeister.net] --Socket.IO /lh-------(direct websocket)------/ (DMR stream)
 ```
 
-D-STAR and VK DMR need the Cloudflare Worker (the browser can't scrape those sites
-cross-origin) and the Worker also proxies HamDB name lookups. **Brandmeister has no
-REST lastheard endpoint**, so the PWA connects directly to its Socket.IO stream at
-`wss://api.brandmeister.network` (path `/lh/socket.io`), joins the `"everything"`
-feed, and renders `Session-Start` voice events as DMR records. This was tested to
-work cross-origin from the PWA.
+D-STAR, VK DMR, and Peanut need the Cloudflare Worker (the browser can't fetch those
+sites cross-origin) and the Worker also proxies HamDB name lookups. **Brandmeister
+has no REST lastheard endpoint**, so the PWA connects directly to its Socket.IO
+stream at `wss://api.brandmeister.network` (path `/lh/socket.io`), joins the
+`"everything"` feed, and renders `Session-Start` voice events as DMR records. This
+was tested to work cross-origin from the PWA.
 
 ### Worker (`worker/`) — `lastheard-api`
 
@@ -49,9 +56,11 @@ work cross-origin from the PWA.
 | --- | --- |
 | `GET /api/lastheard` | Scrapes the D-STAR HTML table and returns a JSON array of records. |
 | `GET /api/vk-lastheard` | Scrapes the VK DMR dashboard (Next.js flight payload) and returns a JSON array of records. |
+| `GET /api/peanut-lastheard` | Proxies the Peanut JSON lastheard list and returns a normalized JSON array of records. |
 | `GET /api/lookup?call=CALL` | Proxies HamDB and returns normalized name/QTH info, edge-cached. |
 | `GET /api/debug` | Diagnostics: D-STAR upstream fetch + parsed record count. |
 | `GET /api/vk-debug` | Diagnostics: VK upstream fetch + parsed record count. |
+| `GET /api/peanut-debug` | Diagnostics: Peanut upstream fetch + parsed record count. |
 | `GET /health` | Liveness check. |
 
 Record shape:
@@ -75,11 +84,18 @@ cells give radio id, callsign, name, "seen via" (repeater/peer/network),
 destination talkgroup, type, duration, and the `epochSeconds` timestamp. This
 yields every field plus the real transmission time in one pass.
 
+Peanut is the simplest source: `peanut.pa7lim.nl/api/lastheard.json` is a plain
+JSON array of `{ call, lastseen, options, room }` rows. The worker maps each to a
+record, parsing the RFC-2822 `lastseen` into an ISO time and tagging the mode from
+the room (`XLX…` → D-STAR with the module letter; otherwise YSF). Peanut exposes no
+names, so they're resolved via HamDB in the PWA like D-STAR.
+
 ### PWA (`web/`) — Vanilla JS + Vite
 
-- `src/api.js` — D-STAR + VK DMR fetch helpers and the D-STAR 30s polling loop.
+- `src/api.js` — D-STAR + VK DMR + Peanut fetch helpers and the D-STAR 30s polling loop.
 - `src/bm.js` — Brandmeister DMR Socket.IO stream client (connect, join, parse, batch into the store).
 - `src/vk.js` — VK DMR 30s polling client (fetch via worker, pre-fill names, merge into the store).
+- `src/peanut.js` — Peanut YSF/Fusion 30s polling client (fetch via worker, merge into the store; names resolved via HamDB).
 - `src/store.js` — heard-station map, 10-minute sticky prune, entry cap, watchlist, filter, alarm detection, event emitter.
 - `src/db.js` — localStorage callsign→name cache with in-flight dedup.
 - `src/audio.js` — Web Audio beep, armed on user gesture.
@@ -159,5 +175,19 @@ VITE_API_BASE=https://lastheard-api.<you>.workers.dev npm run build
   page's flight-payload shape is coupled to its Next.js build — a dashboard
   redesign or framework upgrade can break parsing (the `/api/vk-debug` endpoint
   helps diagnose). VK records carry no geographic location.
-- More digital modes (YSF, etc.) can be added by extending the worker or adding
-  another stream client and tagging `mode`/`source` accordingly.
+- **Peanut** exposes only the most recent transmissions and no names; callsigns
+  are Peanut app users and may not resolve in HamDB. The store is callsign-keyed,
+  so a station heard on both Peanut and another network shows whichever source
+  polled most recently.
+- More digital modes can be added by extending the worker or adding another
+  stream client and tagging `mode`/`source` accordingly.
+
+## Contact & license
+
+LastHeard DV is by **Gordon, VK3TEN** — email
+[vk3ten@gmail.com](mailto:vk3ten@gmail.com) if you enjoy the app or have feature
+requests.
+
+Released under the [MIT License](LICENSE) — free to use, modify, and share,
+provided "as is" without warranty of any kind. The author assumes no liability
+for its use.

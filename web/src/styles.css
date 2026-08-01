@@ -59,6 +59,60 @@ body.alarmed { animation: alarm-flash 0.6s ease-in-out 8; }
 .brand h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
 .brand img { border-radius: 6px; }
 .status { font-size: 14px; color: var(--muted); }
+.about-btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.about-btn:hover { color: var(--accent); background: var(--panel-2); }
+
+/* About modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+}
+.modal[hidden] { display: none; }
+.modal-card {
+  position: relative;
+  max-width: 440px;
+  width: 100%;
+  padding: 22px 24px 24px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.modal-card h2 { margin: 0 0 4px; font-size: 20px; letter-spacing: 0.5px; }
+.modal-card p { margin: 10px 0; }
+.modal-card a { color: var(--accent); }
+.about-byline { color: var(--muted); }
+.about-license { color: var(--muted); font-size: 13px; }
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.modal-close:hover { color: var(--danger); }
 .status.ok { color: var(--fresh); }
 .status.loading { color: var(--accent-2); }
 .status.error { color: var(--danger); }
@@ -205,6 +259,7 @@ main { padding: 12px 14px 40px; }
 .mode { font-size: 13px; font-weight: 600; }
 .mode-dstar { color: var(--accent); }
 .mode-dmr { color: var(--accent-2); }
+.mode-ysf { color: #a371f7; }
 .node .src {
   display: inline-block;
   margin-right: 5px;
