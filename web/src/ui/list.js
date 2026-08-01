@@ -33,6 +33,13 @@ function resolveName(call) {
     .finally(() => render());
 }
 
+// Pre-fill a callsign's name from a source that already provides it (e.g. the
+// Brandmeister stream, which includes SourceName) so we skip the HamDB lookup.
+export function setName(call, info) {
+  if (!call) return;
+  names.set(call, info);
+}
+
 let container, empty;
 
 export function initList(listEl, emptyEl) {
@@ -54,16 +61,20 @@ export function initList(listEl, emptyEl) {
   render();
 }
 
+const MAX_RENDER = 250;
+
 export function render() {
   if (!container) return;
-  const items = visibleList();
+  const all = visibleList();
+  const truncated = all.length > MAX_RENDER;
+  const items = truncated ? all.slice(0, MAX_RENDER) : all;
 
   // Kick off name lookups for any visible callsign we haven't resolved.
   for (const e of items) resolveName(e.callsign);
 
   container.innerHTML = "";
 
-  if (items.length === 0) {
+  if (all.length === 0) {
     if (empty) empty.hidden = false;
     return;
   }
@@ -89,7 +100,7 @@ export function render() {
         ${e.module ? `<span class="module" title="Band/module">${escapeHtml(e.module)}</span>` : ""}
       </td>
       <td class="name">${escapeHtml(nameLabel(e.callsign))}</td>
-      <td class="mode">${escapeHtml(e.mode)}</td>
+      <td class="mode mode-${e.mode.toLowerCase().replace(/[^a-z0-9]/g, "")}">${escapeHtml(e.mode)}</td>
       <td class="node">
         <span class="sys">${escapeHtml(e.system)}</span>
         <span class="nodelabel">${escapeHtml(e.nodeLabel)}</span>
@@ -102,10 +113,15 @@ export function render() {
 
   container.appendChild(table);
 
-  // Clear one-shot "fresh" highlight flags after painting.
-  if (clearFresh()) {
-    // nothing to re-render now; flags cleared for next poll
+  if (truncated) {
+    const note = document.createElement("p");
+    note.className = "truncated";
+    note.textContent = `Showing the ${MAX_RENDER} most recent of ${all.length} stations — narrow the filter to see more.`;
+    container.appendChild(note);
   }
+
+  // Clear one-shot "fresh" highlight flags after painting.
+  clearFresh();
 }
 
 function escapeHtml(s) {

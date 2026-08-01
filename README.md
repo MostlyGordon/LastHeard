@@ -1,22 +1,25 @@
 # LastHeard
 
 A Progressive Web App that shows a live **"last heard"** list of stations heard on
-amateur-radio digital voice modes — starting with **D-STAR**. Installable on PC,
-tablet, and phone; works offline-first as a PWA.
+amateur-radio digital voice modes — **D-STAR** and **DMR (Brandmeister)**. Installable
+on PC, tablet, and phone; works offline-first as a PWA.
 
 ## Features
 
-- **Live last-heard list** scraped from [dsm.dstarusers.org](http://dsm.dstarusers.org/lastheard.php),
-  polled every 30s.
-- Each station shows **callsign, name, digital mode, and repeater/reflector**.
+- **D-STAR last-heard list** scraped from [dsm.dstarusers.org](http://dsm.dstarusers.org/lastheard.php),
+  polled every 30s via the Cloudflare Worker.
+- **DMR last-heard list** streamed live from [Brandmeister](https://brandmeister.network/#/lh)
+  via its Socket.IO feed (real-time, no polling).
+- Each station shows **callsign, name, digital mode, and repeater/reflector/talk group**.
 - **Sticky for 10 minutes** — a station stays on screen for 10 min after its last
-  transmission, even if it drops out of the live feed. A new transmission resets the window.
-- **Area filter** — a search box that matches location, callsign, repeater/reflector, or node label.
-- **On-air alarms** — keep a watchlist of callsigns; when one comes on air the app
-  beeps (Web Audio) and flashes (row highlight + title flash). Sound is gated behind
-  an "Arm alarms" click to satisfy browser autoplay policies. A mute toggle gives
-  flash-only alerts. System notifications are used when permission is granted.
-- Names resolved via the free [HamDB](https://hamdb.org/api) API and cached locally.
+  transmission, even if it drops out of the feed. A new transmission resets the window.
+- **Area filter** — a search box that matches location, callsign, repeater/reflector, talk group, or node label.
+- **On-air alarms** — keep a watchlist of callsigns (per-row ★/☆ toggle or the alarm
+  panel); when one comes on air on either network the app beeps (Web Audio) and
+  flashes (row highlight + title flash). Sound is gated behind a "Sound" click to
+  satisfy browser autoplay policies. System notifications are used when permission is granted.
+- Names resolved via the free [HamDB](https://hamdb.org/api) API for D-STAR (cached
+  locally); DMR names come straight from the Brandmeister stream (`SourceName`).
 - Responsive: table on wide screens, stacked cards on phones; dark/light themes.
 
 ## Architecture
@@ -24,11 +27,15 @@ tablet, and phone; works offline-first as a PWA.
 ```
 [ dsm.dstarusers.org ] --fetch+parse--> [ Cloudflare Worker ] --JSON--> [ Vite PWA ]
 [ api.hamdb.org       ] --proxy+cache--/        (CORS)                  (poll, render, alarm)
+[ api.brandmeister.net ] --Socket.IO /lh-------(direct websocket)------/ (DMR stream)
 ```
 
-A browser PWA cannot fetch `dstarusers.org` cross-origin (CORS), so a Cloudflare
-Worker acts as the scraping proxy and JSON API. It also proxies HamDB name lookups
-with edge caching.
+D-STAR data needs the Cloudflare Worker (the browser can't scrape `dstarusers.org`
+cross-origin) and the Worker also proxies HamDB name lookups. **Brandmeister has no
+REST lastheard endpoint**, so the PWA connects directly to its Socket.IO stream at
+`wss://api.brandmeister.network` (path `/lh/socket.io`), joins the `"everything"`
+feed, and renders `Session-Start` voice events as DMR records. This was tested to
+work cross-origin from the PWA.
 
 ### Worker (`worker/`) — `lastheard-api`
 
@@ -53,11 +60,12 @@ Node (reflector/repeater link + label), and Location.
 
 ### PWA (`web/`) — Vanilla JS + Vite
 
-- `src/api.js` — fetch helpers + 30s polling loop.
-- `src/store.js` — heard-station map, 10-minute sticky prune, watchlist, filter, alarm detection, event emitter.
+- `src/api.js` — D-STAR fetch helpers + 30s polling loop.
+- `src/bm.js` — Brandmeister DMR Socket.IO stream client (connect, join, parse, batch into the store).
+- `src/store.js` — heard-station map, 10-minute sticky prune, entry cap, watchlist, filter, alarm detection, event emitter.
 - `src/db.js` — localStorage callsign→name cache with in-flight dedup.
 - `src/audio.js` — Web Audio beep, armed on user gesture.
-- `src/ui/list.js` — responsive table/card rendering + name resolution.
+- `src/ui/list.js` — responsive table/card rendering + name resolution (DMR names pre-filled by `bm.js`).
 - `src/ui/filter.js` — area/text filter.
 - `src/ui/alarm.js` — watchlist editor + beep/flash/notification engine.
 - `vite-plugin-pwa` — manifest, icons, auto-updating service worker.
@@ -120,5 +128,14 @@ VITE_API_BASE=https://lastheard-api.<you>.workers.dev npm run build
   than the interval may be missed.
 - **Scrape fragility.** A redesign of the source page will break parsing; the
   worker degrades gracefully (empty array / debug endpoint helps diagnose).
-- More digital modes (DMR, YSF, etc.) can be added by extending the worker with
-  additional sources and tagging `mode` accordingly.
+- **DMR is the global firehose.** The Brandmeister `"everything"` feed is high
+  volume, so the store is capped at 400 entries and the list renders the 250 most
+  recent (narrow the filter to see more). DMR records carry no geographic location
+  (the BM stream doesn't provide one), so the area filter matches callsign /
+  repeater / talk group for them.
+- **DMR depends on the BM Socket.IO service** accepting the PWA's origin. This was
+  verified cross-origin, but if Brandmeister restricts origins in future, DMR would
+  need to be proxied through the Worker instead.
+- **DMR names** come from the BM stream and may be missing for some callsigns.
+- More digital modes (YSF, etc.) can be added by extending the worker or adding
+  another stream client and tagging `mode` accordingly.

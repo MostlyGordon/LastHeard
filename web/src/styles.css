@@ -149,6 +149,8 @@ body.alarmed { animation: alarm-flash 0.6s ease-in-out 8; }
 /* List */
 main { padding: 12px 14px 40px; }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+.truncated { color: var(--muted); font-size: 12px; text-align: center; margin: 12px 0; }
+.toggle.err { color: var(--danger); border-color: var(--danger); }
 
 .lh-table { width: 100%; border-collapse: collapse; }
 .lh-table th {
@@ -200,7 +202,9 @@ main { padding: 12px 14px 40px; }
 .watch-btn.on { color: var(--accent); }
 .watch-btn:hover { color: var(--accent-2); }
 .name { color: var(--text); }
-.mode { color: var(--accent); font-size: 13px; }
+.mode { font-size: 13px; font-weight: 600; }
+.mode-dstar { color: var(--accent); }
+.mode-dmr { color: var(--accent-2); }
 .node .sys { font-weight: 600; }
 .node .nodelabel { color: var(--muted); margin-left: 6px; }
 .node .loc { display: block; color: var(--muted); font-size: 12px; }

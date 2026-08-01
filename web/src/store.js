@@ -23,7 +23,6 @@ export const store = Object.assign(new Emitter(), {
   previousTimes: new Map(),
   watchlist: new Set(loadWatchlist()),
   filter: localStorage.getItem("lastheard:filter") || "",
-  firstPoll: true,
 });
 
 function loadWatchlist() {
@@ -60,10 +59,11 @@ export function removeWatch(call) {
   store.emit("change");
 }
 
-// Merge a fresh batch of records from the worker. Emits "alarm" for watched
-// callsigns whose transmission time advanced (skipped on the first poll so we
+// Merge a fresh batch of records (D-STAR scrape or DMR stream). Emits "alarm"
+// for watched callsigns whose transmission time advanced, or for brand-new
+// callsigns unless `suppressNew` is set (used for the first D-STAR poll so we
 // don't alarm for stations already on air at load time).
-export function merge(records) {
+export function merge(records, { suppressNew = false } = {}) {
   const now = Date.now();
   const alarms = [];
 
@@ -76,8 +76,7 @@ export function merge(records) {
 
     store.previousTimes.set(call, r.time);
 
-    const entry = store.heard.get(call);
-    const fresh = (isNew && !store.firstPoll) || advanced;
+    const fresh = (!suppressNew && isNew) || advanced;
     store.heard.set(call, {
       callsign: call,
       module: r.module || "",
@@ -94,11 +93,25 @@ export function merge(records) {
     }
   }
 
-  store.firstPoll = false;
   prune(now);
+  capEntries();
 
   for (const a of alarms) store.emit("alarm", a);
   store.emit("change");
+}
+
+// Keep the in-memory list bounded for high-volume feeds (e.g. the global BM
+// firehose): drop the oldest entries beyond MAX_ENTRIES.
+const MAX_ENTRIES = 400;
+function capEntries() {
+  if (store.heard.size <= MAX_ENTRIES) return;
+  const sorted = [...store.heard.values()].sort((a, b) =>
+    a.lastHeardAt < b.lastHeardAt ? 1 : a.lastHeardAt > b.lastHeardAt ? -1 : 0
+  );
+  const keep = new Set(sorted.slice(0, MAX_ENTRIES).map((e) => e.callsign));
+  for (const call of store.heard.keys()) {
+    if (!keep.has(call)) store.heard.delete(call);
+  }
 }
 
 // Drop entries older than the sticky window.
