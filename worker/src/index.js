@@ -3,6 +3,7 @@
 // HamDB callsign lookups, returning JSON for the LastHeard PWA.
 
 const SRC_URL = "http://dsm.dstarusers.org/lastheard.php?refresh=1";
+const VK_URL = "https://ipsc3.vkdmr.com/dashboard/radios";
 const HAMDB_URL = (call) => `http://api.hamdb.org/v1/${call}/json/lastheard`;
 
 const CORS = {
@@ -21,8 +22,10 @@ export default {
     }
 
     if (url.pathname === "/api/lastheard") return handleLastHeard(request, ctx);
+    if (url.pathname === "/api/vk-lastheard") return handleVkLastHeard(request, ctx);
     if (url.pathname === "/api/lookup") return handleLookup(request, ctx);
     if (url.pathname === "/api/debug") return handleDebug(request, ctx);
+    if (url.pathname === "/api/vk-debug") return handleVkDebug(request, ctx);
     if (url.pathname === "/" || url.pathname === "/health") return json({ ok: true, service: "lastheard-api" });
 
     return json({ error: "not found", path: url.pathname }, 404);
@@ -139,6 +142,7 @@ function buildRecord(cells) {
     nodeLabel,
     location,
     mode: "D-STAR",
+    source: "D-STAR",
   };
 }
 
@@ -154,6 +158,84 @@ function parseTime(s) {
 
 function norm(s) {
   return (s || "").replace(/\s+/g, " ").trim();
+}
+
+// ---------------------------------------------------------------------------
+// /api/vk-lastheard  (VK DMR / ipsc3.vkdmr.com scrape)
+// ---------------------------------------------------------------------------
+
+// ipsc3.vkdmr.com is a Next.js app. The "Last Heard Radios" table is rendered
+// server-side, but the "Last Seen" timestamp is hydrated client-side from an
+// epoch embedded in the RSC flight payload (self.__next_f.push([1,"..."])).
+// We parse the flight payload directly — each data row is a node
+//   ["$","tr","<RadioId>-<SeenVia>-<DestID>-<TS>-<epoch>",{"children":[ ...8 td cells... ]}]
+// — which gives us every field plus the epoch (for correct sticky/alarm timing)
+// in one pass, without depending on the hydrated HTML.
+
+async function handleVkLastHeard(request, ctx) {
+  try {
+    const res = await fetch(VK_URL, {
+      headers: { "User-Agent": "LastHeard-PWA/1.0 (+https://github.com/lastheard)" },
+      cf: { cacheTtl: 20 },
+    });
+    if (!res.ok) return json({ error: `upstream ${res.status}` }, 502);
+    const html = await res.text();
+    const records = parseVkRadios(html);
+    return json(records, 200, { "Cache-Control": "public, max-age=20" });
+  } catch (err) {
+    return json({ error: String(err && err.message || err) }, 502);
+  }
+}
+
+// Reconstruct the RSC flight stream from the inline <script> pushes, then slice
+// out the data rows and read their cells.
+function parseVkRadios(html) {
+  const pushRe = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+  let m, raw = "";
+  while ((m = pushRe.exec(html))) {
+    raw += m[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+  }
+  if (!raw) return [];
+
+  // Data rows are the only ["$","tr","<string>" nodes — the header row uses a
+  // null key, so splitting on this delimiter skips it cleanly.
+  const segments = raw.split('["$","tr","').slice(1);
+
+  // Per cell, "children" is a quoted string, a bare number, or the epoch node
+  // ["$","$Lxx",null,{"epochSeconds":N}]. Cells are in fixed order:
+  // RadioId, Callsign, Name, SeenVia, Destination, Type, Duration, LastSeen.
+  const cellRe = /"children":(?:"((?:[^"\\]|\\.)*)"|(-?\d+(?:\.\d+)?)|\["\$","\$L[a-f0-9]+",null,\{"epochSeconds":(-?\d+)\}])/g;
+
+  const records = [];
+  for (const seg of segments) {
+    const cells = [];
+    cellRe.lastIndex = 0;
+    let c;
+    while ((c = cellRe.exec(seg)) && cells.length < 8) {
+      cells.push(c[1] != null ? c[1] : c[2] != null ? c[2] : c[3] != null ? c[3] : null);
+    }
+    if (cells.length < 8) continue;
+    const call = (cells[1] || "").toUpperCase().trim();
+    const name = cells[2] || "";
+    const seenVia = cells[3] || "";
+    const dest = cells[4] || "";
+    const epoch = Number(cells[7]);
+    if (!call || !Number.isFinite(epoch)) continue;
+
+    const tsMatch = dest.match(/TS([12])/);
+    records.push({
+      callsign: call,
+      name,
+      module: tsMatch ? `S${tsMatch[1]}` : "", // DMR timeslot 1/2
+      time: new Date(epoch * 1000).toISOString(),
+      system: seenVia, // repeater / peer / network that heard the radio
+      nodeLabel: dest, // talkgroup, e.g. "TG 32453 TS1 Kansas City Wide"
+      location: "", // the dashboard exposes no geographic location
+      mode: "DMR",
+      source: "VK DMR",
+    });
+  }
+  return records;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +312,21 @@ async function handleDebug(request, ctx) {
       cf: { cacheTtl: 20 },
     });
     const recs = await parseLastHeard(res);
+    return json({ count: recs.length, firstRecords: recs.slice(0, 5) });
+  } catch (err) {
+    return json({ error: String(err && err.message || err) }, 502);
+  }
+}
+
+async function handleVkDebug(request, ctx) {
+  try {
+    const res = await fetch(VK_URL, {
+      headers: { "User-Agent": "LastHeard-PWA/1.0" },
+      cf: { cacheTtl: 20 },
+    });
+    if (!res.ok) return json({ error: `upstream ${res.status}` }, 502);
+    const html = await res.text();
+    const recs = parseVkRadios(html);
     return json({ count: recs.length, firstRecords: recs.slice(0, 5) });
   } catch (err) {
     return json({ error: String(err && err.message || err) }, 502);

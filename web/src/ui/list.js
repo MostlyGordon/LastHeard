@@ -102,6 +102,7 @@ export function render() {
       <td class="name">${escapeHtml(nameLabel(e.callsign))}</td>
       <td class="mode mode-${e.mode.toLowerCase().replace(/[^a-z0-9]/g, "")}">${escapeHtml(e.mode)}</td>
       <td class="node">
+        ${e.source ? `<span class="src">${escapeHtml(e.source)}</span>` : ""}
         <span class="sys">${escapeHtml(e.system)}</span>
         <span class="nodelabel">${escapeHtml(e.nodeLabel)}</span>
         <span class="loc">${escapeHtml(e.location)}</span>

@@ -8,6 +8,12 @@ export async function fetchLastHeard() {
   return res.json();
 }
 
+export async function fetchVkLastHeard() {
+  const res = await fetch(`${BASE}/api/vk-lastheard`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`vk-lastheard ${res.status}`);
+  return res.json();
+}
+
 export async function fetchLookup(call) {
   const res = await fetch(`${BASE}/api/lookup?call=${encodeURIComponent(call)}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`lookup ${res.status}`);

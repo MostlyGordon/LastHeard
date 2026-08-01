@@ -205,6 +205,19 @@ main { padding: 12px 14px 40px; }
 .mode { font-size: 13px; font-weight: 600; }
 .mode-dstar { color: var(--accent); }
 .mode-dmr { color: var(--accent-2); }
+.node .src {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  vertical-align: middle;
+}
 .node .sys { font-weight: 600; }
 .node .nodelabel { color: var(--muted); margin-left: 6px; }
 .node .loc { display: block; color: var(--muted); font-size: 12px; }

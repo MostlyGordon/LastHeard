@@ -17,7 +17,7 @@ class Emitter {
 }
 
 export const store = Object.assign(new Emitter(), {
-  // callsign -> { callsign, module, lastHeardAt, system, nodeLabel, location, mode, fresh }
+  // callsign -> { callsign, module, lastHeardAt, system, nodeLabel, location, mode, source, fresh }
   heard: new Map(),
   // callsign -> last seen transmission ISO (for detecting new transmissions)
   previousTimes: new Map(),
@@ -85,6 +85,7 @@ export function merge(records, { suppressNew = false } = {}) {
       nodeLabel: r.nodeLabel || "",
       location: r.location || "",
       mode: r.mode || "D-STAR",
+      source: r.source || "",
       fresh,
     });
 
@@ -144,7 +145,7 @@ export function visibleList() {
   const all = [...store.heard.values()];
   const filtered = f
     ? all.filter((e) =>
-        `${e.callsign} ${e.location} ${e.system} ${e.nodeLabel}`.toLowerCase().includes(f)
+        `${e.callsign} ${e.location} ${e.system} ${e.nodeLabel} ${e.mode} ${e.source}`.toLowerCase().includes(f)
       )
     : all;
   filtered.sort((a, b) => (a.lastHeardAt < b.lastHeardAt ? 1 : a.lastHeardAt > b.lastHeardAt ? -1 : 0));

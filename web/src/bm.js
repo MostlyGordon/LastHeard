@@ -95,5 +95,6 @@ function parseBm(msg) {
     nodeLabel,
     location: "", // BM LH stream has no geographic location
     mode: "DMR",
+    source: "Brandmeister",
   };
 }

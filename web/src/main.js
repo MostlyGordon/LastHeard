@@ -2,6 +2,7 @@ import "./styles.css";
 import { startPolling } from "./api.js";
 import { merge, prune, store } from "./store.js";
 import { startBrandmeister } from "./bm.js";
+import { startVkPolling } from "./vk.js";
 import { initList } from "./ui/list.js";
 import { initFilter } from "./ui/filter.js";
 import { initAlarm, requestNotifyPermission } from "./ui/alarm.js";
@@ -90,6 +91,47 @@ bmToggle.addEventListener("click", () => {
 });
 if (bmEnabled) bmStart();
 else bmButton("off");
+
+// VK DMR (ipsc3.vkdmr.com) — polled via the worker, toggleable + persisted.
+const vkToggle = $("vk-toggle");
+let stopVk = null;
+
+function vkButton(state) {
+  vkToggle.classList.toggle("on", state === "connected");
+  vkToggle.classList.toggle("err", state === "error");
+  vkToggle.textContent = {
+    connected: "VK ●",
+    connecting: "VK ◌",
+    error: "VK ✕",
+    off: "VK ○",
+  }[state] || "VK";
+}
+
+function vkStart() {
+  if (stopVk) return;
+  vkButton("connecting");
+  stopVk = startVkPolling({
+    onStatus: (s) => vkButton(s === "error" ? "error" : s === "ok" ? "connected" : "connecting"),
+  });
+}
+
+function vkStop() {
+  if (stopVk) {
+    stopVk();
+    stopVk = null;
+  }
+  vkButton("off");
+}
+
+let vkEnabled = localStorage.getItem("lastheard:vk") !== "0";
+vkToggle.addEventListener("click", () => {
+  vkEnabled = !vkEnabled;
+  localStorage.setItem("lastheard:vk", vkEnabled ? "1" : "0");
+  if (vkEnabled) vkStart();
+  else vkStop();
+});
+if (vkEnabled) vkStart();
+else vkButton("off");
 
 // Service worker update prompt (vite-plugin-pwa, autoUpdate).
 import { registerSW } from "virtual:pwa-register";
